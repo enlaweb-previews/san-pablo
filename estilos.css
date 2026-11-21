@@ -144,6 +144,17 @@ h3{font-size:1.45rem;color:var(--verde)}
 
 .footer{background:#12261a;color:var(--blanco);text-align:center;padding:40px 5% 110px;display:grid;justify-items:center;gap:6px}
 .pdf-bar.foot{margin-top:.8rem}
+/* Crédito de desarrollo (colores de marca ENLAWEB.CLICK: #f3f0e6 / #f3e32f / #daac1e) */
+.credito{margin-top:1.4rem;padding-top:1rem;border-top:1px solid rgba(255,250,242,.12);width:min(560px,100%);font-size:.82rem;color:rgba(255,250,242,.72)}
+.credito a{display:inline-flex;align-items:center;gap:6px;margin-left:4px;text-decoration:none;vertical-align:middle}
+.credito img{width:20px;height:20px;border-radius:5px;flex:none}
+.credito .elw{font:700 .95rem 'Space Grotesk','Nunito',sans-serif;letter-spacing:.01em;line-height:1}
+.credito .elw-a{color:#f3f0e6}
+.credito .elw-b{color:#f3e32f}
+@supports ((-webkit-background-clip:text) or (background-clip:text)){
+  .credito .elw-b{background:linear-gradient(90deg,#f3e32f,#daac1e);-webkit-background-clip:text;background-clip:text;color:transparent}
+}
+.credito a:hover .elw-a{color:#f3e32f}
 
 /* WhatsApp flotante */
 .wa-float{position:fixed;right:16px;bottom:16px;z-index:60;display:flex;align-items:center;gap:8px;background:var(--wa);color:#fff;text-decoration:none;font-weight:800;padding:12px 16px 12px 12px;border-radius:999px;box-shadow:0 8px 24px rgba(0,0,0,.3);animation:pulse 2.4s infinite}
@@ -181,6 +192,8 @@ h3{font-size:1.45rem;color:var(--verde)}
 @media(min-width:900px){.pdf-mode .masonry{grid-template-columns:repeat(4,1fr)}}
 .pdf-mode .masonry img{margin:0;aspect-ratio:4/3;object-fit:cover;height:auto}
 .pdf-mode .footer{padding:34px 5% 40px}
+.pdf-mode .credito .elw-b{background:none;color:#f3e32f}
+.pdf-mode .credito img{position:relative;top:3px}
 .pdf-mode .pill{display:table;line-height:1.5;padding:.15rem .8rem .5rem}
 .pdf-mode .rutas li b{padding:.05rem .5rem .4rem}
 .pdf-mode .day .n{padding:.15rem .7rem .45rem}

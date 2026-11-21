@@ -198,6 +198,9 @@
       pages.push({start:start, end:cut});
       start = cut;
     }
+    // si al final sobra un pedacito (ej. el crédito del pie), se une a la última página
+    var n = pages.length;
+    if(n > 1 && pages[n-1].end - pages[n-1].start < pageH * 0.2){ pages[n-2].end = pages[n-1].end; pages.pop(); }
     return pages;
   }
 
@@ -216,7 +219,7 @@
       var pi = 0, cur = null, added = 0;
       function newPage(p){
         var cv = document.createElement('canvas'), last = p === pages[pages.length - 1];
-        cv.width = Math.round(c.w * S); cv.height = Math.round((last ? Math.min(c.h, p.end - p.start) : c.h) * S);
+        cv.width = Math.round(c.w * S); cv.height = Math.round((last ? p.end - p.start : c.h) * S);
         var ctx = cv.getContext('2d'); ctx.fillStyle = BG; ctx.fillRect(0, 0, cv.width, cv.height);
         return {p:p, cv:cv, ctx:ctx};
       }
