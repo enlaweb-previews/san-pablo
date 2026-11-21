@@ -1,5 +1,6 @@
 (function(){
   var WA = '573123001568';
+  var WA_URL = 'https://wa.me/' + WA + '?text=' + encodeURIComponent('Hola, quiero información del plan en la Reserva Natural San Pablo 🌅');
   var $ = function(s,c){return (c||document).querySelector(s)};
   var $$ = function(s,c){return Array.prototype.slice.call((c||document).querySelectorAll(s))};
   var root = document.documentElement;
@@ -188,7 +189,15 @@
     atoms.forEach(function(a){ if(first === null || a.top < first) first = a.top; });
     if(first !== null && first > 0) atoms.push({top:0, bottom:first + 2, h:first + 2});
     var r = el.getBoundingClientRect();
-    return {h:r.height, w:r.width, atoms:atoms};
+    // Enlaces visibles (botones, teléfonos, correo, redes, mapa, crédito): un rectángulo por línea
+    var links = [];
+    $$('a[href]', el).forEach(function(a){
+      Array.prototype.forEach.call(a.getClientRects(), function(rc){
+        if(rc.width < 2 || rc.height < 2) return;
+        links.push({href:a.getAttribute('href') || '', abs:a.href || '', x:rc.left - r.left, w:rc.width, top:rc.top - top, bottom:rc.bottom - top});
+      });
+    });
+    return {h:r.height, w:r.width, atoms:atoms, links:links};
   }
   function paginate(blocks, total, pageH){
     var atoms = [];
@@ -242,7 +251,7 @@
       var hero = $('.hero', d); if(hero) hero.style.minHeight = pageH + 'px';   // portada = página completa
       var els = $$('#pagina > section, body > footer', d).filter(function(el){ return el.getBoundingClientRect().height > 0; });
       els.forEach(function(el, i){ el.setAttribute('data-pdfb', i); });
-      var blocks = [], y = 0;
+      var blocks = [], y = 0, links = [];
       var chain = frames(w);
       els.forEach(function(el, i){
         chain = chain.then(function(){
@@ -266,8 +275,12 @@
           }).then(function(cv){
             if(!info) info = measureBlock(el);
             var hh = cv.height / sc;   // alto real dibujado
-            blocks.push({cv:cv, top:y, h:hh, bottom:y + hh, k:cv.height / hh, atoms:info.atoms.map(function(a){
-              var f = hh / (info.h || hh); return {top:a.top * f, bottom:a.bottom * f, h:a.h * f}; })});
+            var f = hh / (info.h || hh), fx = c.w * 0.75 / (info.w || W), y0 = y;
+            blocks.push({cv:cv, id:el.id, top:y, h:hh, bottom:y + hh, k:cv.height / hh, atoms:info.atoms.map(function(a){
+              return {top:a.top * f, bottom:a.bottom * f, h:a.h * f}; })});
+            (info.links || []).forEach(function(l){
+              links.push({href:l.href, abs:l.abs, x:l.x * fx, w:l.w * fx, top:y0 + l.top * f, bottom:y0 + l.bottom * f});
+            });
             y += hh;
           });
         });
@@ -277,6 +290,17 @@
         var J = window.jspdf.jsPDF, pw = c.w * 0.75, ph = c.h * 0.75, orient = pw > ph ? 'landscape' : 'portrait';
         var pdf = new J({unit:'pt', format:[pw, ph], orientation:orient, compress:true});
         var PS = S * c.w / W;   // pixeles del lienzo de página por px css de la copia
+        var PT = PS / S * 0.75;  // puntos PDF por px css de la copia
+        function pageOf(yy){ for(var n = 0; n < pages.length; n++){ if(yy < pages[n].end) return n + 1; } return pages.length; }
+        function target(l){
+          if(l.href.charAt(0) === '#'){
+            var id = l.href.slice(1);
+            if(id === 'reservar' || !id) return {url:WA_URL};   // "Quiero reservar" -> WhatsApp
+            for(var n = 0; n < blocks.length; n++){ if(blocks[n].id === id) return {pageNumber:pageOf(blocks[n].top + 1)}; }
+            return null;
+          }
+          return /^(https?:|tel:|mailto:)/i.test(l.abs) ? {url:l.abs} : null;
+        }
         pages.forEach(function(p, pi){
           var last = pi === pages.length - 1;
           var cv = document.createElement('canvas');
@@ -298,6 +322,13 @@
           if(pi) pdf.addPage([pw, h], pw > h ? 'landscape' : 'portrait');
           else if(Math.abs(h - ph) > 0.5){ pdf.deletePage(1); pdf.addPage([pw, h], pw > h ? 'landscape' : 'portrait'); }
           pdf.addImage(cv.toDataURL('image/jpeg', 0.86), 'JPEG', 0, 0, pw, h, undefined, 'FAST');
+          // Enlaces clicables sobre la imagen (si un enlace queda partido entre páginas, va en ambas)
+          links.forEach(function(l){
+            var t0 = Math.max(l.top, p.start), t1 = Math.min(l.bottom, p.end);
+            if(t1 - t0 < 4) return;
+            var tg = target(l); if(!tg) return;
+            pdf.link(Math.max(0, l.x - 2), (t0 - p.start) * PT - 2, l.w + 4, (t1 - t0) * PT + 5, tg);   // margen: área cómoda para el dedo
+          });
           cv.width = cv.height = 0;
         });
         blocks.forEach(function(b){ b.cv.width = b.cv.height = 0; });
