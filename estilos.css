@@ -101,7 +101,8 @@ h3{font-size:1.45rem;color:var(--verde)}
 .rutas h3,.opcional h3{color:var(--blanco);font-size:1.6rem}
 .rutas .note{opacity:.85;margin-bottom:.6rem}
 .rutas ul{list-style:none;display:grid;gap:8px}
-.rutas li b{display:inline-block;background:var(--sol2);color:var(--verde);border-radius:8px;padding:0 .5rem;margin-right:.4rem;font-size:.85rem}
+.rutas li{display:flex;gap:.6rem;align-items:flex-start}
+.rutas li b{flex:none;display:block;background:var(--sol2);color:var(--verde);border-radius:8px;padding:.05rem .5rem;margin-top:.15rem;font-size:.85rem;line-height:1.5}
 .opcional{background:linear-gradient(135deg,var(--sol),#c4501a)}
 .pill{display:inline-block;background:rgba(0,0,0,.2);border-radius:999px;padding:.2rem .8rem;font-size:.78rem;font-weight:800;text-transform:uppercase;letter-spacing:.08em;margin-bottom:.5rem}
 .precios{display:flex;gap:12px;margin-top:.8rem}
@@ -152,15 +153,42 @@ h3{font-size:1.45rem;color:var(--verde)}
 .toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:#12261a;color:#fff;padding:.7rem 1.2rem;border-radius:12px;font-weight:700;opacity:0;pointer-events:none;transition:opacity .25s;z-index:70;max-width:90%;text-align:center}
 .toast.show{opacity:1}
 
-/* Modo exportación PDF */
-body.pdf-mode .hero{min-height:auto}
-body.pdf-mode .hero-inner{padding:50px 6% 50px}
-body.pdf-mode .collage img:last-child{transform:none}
-body.pdf-mode .card:hover{transform:none}
-body.pdf-mode #reservar{display:none}
+/* Animaciones de entrada (solo si JS puso la clase .anim) */
+.anim .rv{opacity:0;translate:0 34px;transition:opacity .75s ease,translate .8s cubic-bezier(.2,.7,.2,1),scale .8s cubic-bezier(.2,.7,.2,1),transform .2s;transition-delay:var(--d,0s)}
+.anim .rv.zoom{translate:0 18px;scale:.93}
+.anim .rv.in{opacity:1;translate:0 0;scale:1}
+.anim .hero-inner > *{animation:heroIn .9s cubic-bezier(.2,.7,.2,1) both}
+.anim .hero-inner > :nth-child(2){animation-delay:.12s}
+.anim .hero-inner > :nth-child(3){animation-delay:.24s}
+.anim .hero-inner > :nth-child(4){animation-delay:.36s}
+.anim .hero-inner > :nth-child(5){animation-delay:.48s}
+.anim .hero-inner > :nth-child(n+6){animation-delay:.6s}
+.anim .hero-bg{animation:heroZoom 2.4s ease-out both}
+@keyframes heroIn{from{opacity:0;transform:translateY(26px)}to{opacity:1;transform:none}}
+@keyframes heroZoom{from{transform:scale(1.08)}to{transform:none}}
+@media (prefers-reduced-motion: reduce){.anim .rv{opacity:1;translate:none;scale:none;transition:none}.anim .hero-inner > *,.anim .hero-bg{animation:none}}
+
+/* Modo exportación PDF (copia interna ?pdf=1) */
+.pdf-mode{scroll-behavior:auto}
+.pdf-mode *,.pdf-mode *::before,.pdf-mode *::after{animation:none!important;transition:none!important}
+.pdf-mode .topbar,.pdf-mode .wa-float,.pdf-mode .pdf-bar,.pdf-mode .toast,.pdf-mode #reservar{display:none!important}
+.pdf-mode .hero{min-height:0}
+.pdf-mode .hero-inner{padding:56px 6% 52px}
+.pdf-mode .section{padding:52px 0}
+.pdf-mode .collage img:last-child{transform:none}
+.pdf-mode .card,.pdf-mode .card:hover{transform:none}
+.pdf-mode .masonry{columns:auto;display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+@media(min-width:900px){.pdf-mode .masonry{grid-template-columns:repeat(4,1fr)}}
+.pdf-mode .masonry img{margin:0;aspect-ratio:4/3;object-fit:cover;height:auto}
+.pdf-mode .footer{padding:34px 5% 40px}
+.pdf-mode .pill{display:table;line-height:1.5;padding:.15rem .8rem .5rem}
+.pdf-mode .rutas li b{padding:.05rem .5rem .4rem}
+.pdf-mode .day .n{padding:.15rem .7rem .45rem}
+.pdf-mode .hero .tag{padding:.15rem .9rem .4rem}
 
 /* Impresión (respaldo) */
 @media print{
+  .rv{opacity:1!important;translate:none!important;scale:none!important}
   .topbar,.wa-float,.pdf-bar,.toast,#reservar{display:none!important}
   .hero{min-height:auto}.hero-inner{padding:40px 5%}
   .section{padding:30px 0}
