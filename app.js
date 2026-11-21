@@ -108,7 +108,8 @@
     return new Promise(function(res, rej){
       var fr = document.createElement('iframe');
       fr.setAttribute('aria-hidden','true'); fr.tabIndex = -1;
-      fr.style.cssText = 'position:fixed;top:0;left:-30000px;width:'+c.w+'px;height:'+c.h+'px;border:0;opacity:0;pointer-events:none;z-index:-1';
+      var fw = window.__pdfFrameW || c.w;
+      fr.style.cssText = 'position:fixed;top:0;left:-30000px;width:'+fw+'px;min-width:'+fw+'px;max-width:'+fw+'px;height:'+c.h+'px;border:0;opacity:0;pointer-events:none;z-index:-1';
       var t = setTimeout(function(){ rej(new Error('La copia de la página tardó demasiado')); }, 30000);
       fr.onload = function(){ clearTimeout(t); res(fr); };
       fr.src = location.href.split('#')[0].split('?')[0] + '?pdf=1';
@@ -116,26 +117,30 @@
     });
   }
 
-  function prepareFrame(fr, c){
+  function prepareFrame(fr){
     var w = fr.contentWindow, d = fr.contentDocument;
     if(!d || !d.body) throw new Error('Sin acceso a la copia (abra la página desde el hosting, no como archivo)');
     d.documentElement.classList.add('pdf-mode');
     var imgs = $$('img', d);
     var waits = imgs.map(function(img){
-      if(img.getAttribute('loading') === 'lazy') img.loading = 'eager';
-      if(img.complete && img.naturalWidth) return Promise.resolve();
-      return Promise.race([ new Promise(function(r){ img.addEventListener('load', r); img.addEventListener('error', r); }), timeout(15000) ]);
+      img.loading = 'eager'; img.removeAttribute('loading');
+      var done = (img.complete && img.naturalWidth) ? Promise.resolve()
+        : Promise.race([ new Promise(function(r){ img.addEventListener('load', r); img.addEventListener('error', r); }), timeout(20000) ]);
+      // decode(): en iPhone la foto debe estar decodificada antes de "fotografiar"
+      return done.then(function(){ return img.decode ? img.decode().catch(function(){}) : null; });
     });
     var fonts = (d.fonts && d.fonts.ready) ? Promise.race([d.fonts.ready, timeout(6000)]) : Promise.resolve();
     var lib = w.html2canvas ? Promise.resolve() : loadScript(H2C, d);
     return Promise.all([Promise.all(waits), fonts, lib]).then(function(){
       w.scrollTo(0, 0);
-      var hero = $('.hero', d); if(hero) hero.style.minHeight = c.h + 'px';   // portada = página completa
-      coverToDiv(d, w);   // html2canvas no entiende object-fit:cover: lo pasamos a background-size:cover
-      return frames(w);
-    });
+      coverToDiv(d, w);
+      return preloadBackgrounds(d, w);
+    }).then(function(){ return frames(w); });
   }
 
+  // html2canvas no entiende object-fit:cover -> se cambia por un div con background-size:cover.
+  // Tamaño relativo (100% + aspect-ratio) para que funcione con cualquier ancho real del iframe (iPhone).
+  var hasAR = window.CSS && CSS.supports && CSS.supports('aspect-ratio', '1 / 1');
   function coverToDiv(d, w){
     $$('img', d).forEach(function(img){
       var cs = w.getComputedStyle(img);
@@ -143,123 +148,161 @@
       var r = img.getBoundingClientRect();
       var div = d.createElement('div'), s = div.style;
       div.className = img.className + ' pdf-img';
-      s.width = r.width + 'px'; s.height = r.height + 'px'; s.display = 'block';
+      s.display = 'block';
+      if(cs.position === 'absolute'){ s.position = 'absolute'; s.left = s.top = '0'; s.width = s.height = '100%'; }
+      else if(hasAR && r.height){ s.width = '100%'; s.height = 'auto'; s.aspectRatio = (r.width / r.height).toFixed(4); }
+      else { s.width = r.width + 'px'; s.height = r.height + 'px'; }
       s.backgroundImage = 'url("' + (img.currentSrc || img.src) + '")';
       s.backgroundSize = 'cover'; s.backgroundPosition = cs.objectPosition || '50% 50%'; s.backgroundRepeat = 'no-repeat';
       s.borderRadius = cs.borderRadius; s.boxShadow = cs.boxShadow;
-      s.marginTop = cs.marginTop; s.marginBottom = cs.marginBottom; s.marginLeft = cs.marginLeft; s.marginRight = cs.marginRight;
+      s.marginTop = cs.marginTop; s.marginBottom = cs.marginBottom;
       img.parentNode.replaceChild(div, img);
     });
   }
+  // Precarga y decodifica todas las imágenes de fondo (CSS) antes de capturar
+  function preloadBackgrounds(d, w){
+    var urls = {};
+    $$('*', d).forEach(function(el){
+      var bg = w.getComputedStyle(el).backgroundImage, m, re = /url\(["']?([^"')]+)["']?\)/g;
+      while(bg && (m = re.exec(bg))) urls[m[1]] = 1;
+    });
+    return Promise.all(Object.keys(urls).map(function(u){
+      return Promise.race([ new Promise(function(r){
+        var im = new Image(); im.onload = function(){ (im.decode ? im.decode() : Promise.resolve()).then(r, r); }; im.onerror = r; im.src = u;
+      }), timeout(15000) ]);
+    }));
+  }
 
-  // Zonas que no se deben partir entre páginas
+  // Zonas que no se deben partir entre páginas (medidas DENTRO de la copia que html2canvas dibuja)
   var ATOMS = '.hero-inner, .card, .day, .day header, .day li, .cbox, .rutas, .opcional, .precios, .collage > *, .masonry > *, p, h2, h3, .chips li, .btn, .footer > *';
-  function measure(d, w){
-    var y = w.pageYOffset || 0;
-    var box = function(el){ var r = el.getBoundingClientRect(); return {top:r.top + y, bottom:r.bottom + y, h:r.height}; };
-    var blocks = $$('#pagina > section, body > footer', d).filter(function(el){ return el.getBoundingClientRect().height > 0; })
-      .map(function(el){ var b = box(el); b.el = el; return b; });
-    var atoms = $$(ATOMS, d).map(box).filter(function(a){ return a.h > 0; });
-    // El título (kicker + h2) siempre acompañado de algo de contenido debajo
-    $$('h2', d).forEach(function(h){
+  function measureBlock(el){
+    var top = el.getBoundingClientRect().top;
+    var box = function(e){ var r = e.getBoundingClientRect(); return {top:r.top - top, bottom:r.bottom - top, h:r.height}; };
+    var atoms = $$(ATOMS, el).map(box).filter(function(a){ return a.h > 0; });
+    $$('h2', el).forEach(function(h){   // título (kicker + h2) siempre con algo de contenido debajo
       var b = box(h), k = h.previousElementSibling;
       if(k && k.classList.contains('kicker')) b.top = Math.min(b.top, box(k).top);
       b.bottom += 160; b.h = b.bottom - b.top; atoms.push(b);
     });
-    // No cortar dentro del margen superior de una sección: el corte se va al inicio de la sección
-    blocks.forEach(function(b){
-      var first = null;
-      atoms.forEach(function(a){ if(a.top >= b.top && a.top < b.bottom && (first === null || a.top < first)) first = a.top; });
-      if(first !== null && first > b.top) atoms.push({top:b.top, bottom:first + 2, h:first + 2 - b.top});
-    });
-    return {blocks:blocks, atoms:atoms, total:blocks.length ? blocks[blocks.length-1].bottom : d.body.scrollHeight};
+    var first = null;   // no cortar dentro del margen superior de la sección
+    atoms.forEach(function(a){ if(first === null || a.top < first) first = a.top; });
+    if(first !== null && first > 0) atoms.push({top:0, bottom:first + 2, h:first + 2});
+    var r = el.getBoundingClientRect();
+    return {h:r.height, w:r.width, atoms:atoms};
   }
-  function paginate(m, pageH){
-    var pages = [], start = m.blocks.length ? m.blocks[0].top : 0;
-    while(start < m.total - 2){
+  function paginate(blocks, total, pageH){
+    var atoms = [];
+    blocks.forEach(function(b){ b.atoms.forEach(function(a){ atoms.push({top:a.top + b.top, bottom:a.bottom + b.top, h:a.h}); }); });
+    var pages = [], start = 0;
+    while(start < total - 2){
       var ideal = start + pageH, cut = ideal;
-      if(ideal >= m.total){ cut = m.total; }
+      if(ideal >= total){ cut = total; }
       else {
         for(var guard = 0, changed = true; changed && guard < 60; guard++){
           changed = false;
-          m.atoms.forEach(function(a){
+          atoms.forEach(function(a){
             if(a.h <= pageH * 0.92 && a.top > start + 1 && a.top < cut - 1 && a.bottom > cut + 1){ cut = a.top; changed = true; }
           });
         }
-        // un poco de aire arriba de la página siguiente, sin invadir el elemento anterior
-        var atBlock = m.blocks.some(function(b){ return Math.abs(b.top - cut) < 1; });
-        if(cut < ideal && !atBlock){
+        if(cut - start < pageH * 0.35) cut = ideal;
+        var atBlock = blocks.some(function(b){ return Math.abs(b.top - cut) < 1; });
+        if(cut < ideal && !atBlock){   // un poco de aire arriba de la página siguiente
           var prev = start;
-          m.atoms.forEach(function(a){ if(a.bottom <= cut + 0.5 && a.bottom > prev) prev = a.bottom; });
+          atoms.forEach(function(a){ if(a.bottom <= cut + 0.5 && a.bottom > prev) prev = a.bottom; });
           cut = Math.max(prev, cut - 16, start + 1);
         }
-        if(cut - start < pageH * 0.35) cut = ideal;
       }
       pages.push({start:start, end:cut});
       start = cut;
     }
-    // si al final sobra un pedacito (ej. el crédito del pie), se une a la última página
-    var n = pages.length;
+    var n = pages.length;   // si al final sobra un pedacito (ej. el crédito del pie), se une a la última página
     if(n > 1 && pages[n-1].end - pages[n-1].start < pageH * 0.2){ pages[n-2].end = pages[n-1].end; pages.pop(); }
     return pages;
   }
+  // ¿El lienzo salió vacío? (falla típica de iPhone por memoria)
+  function looksBlank(cv){
+    try{
+      var x = cv.getContext('2d'), n = 0, W = cv.width, H = cv.height;
+      for(var i = 1; i <= 6; i++){ var px = x.getImageData(Math.floor(W * i / 7), Math.floor(H / 2), 1, 1).data; if(px[3] === 0) n++; }
+      return n >= 6;
+    }catch(e){ return false; }
+  }
 
   function exportPDF(kind, btns){
-    var c = CONF[kind], fr = null, S = c.scale;
+    var c = CONF[kind], fr = null, S = c.scale, isPhone = kind === 'movil';
     btns.forEach(function(b){ b.disabled = true; });
-    toast('Generando PDF ' + (kind === 'pc' ? 'PC' : 'móvil') + '… ⏳', 60000);
+    toast('Generando PDF ' + (kind === 'pc' ? 'PC' : 'móvil') + '… ⏳', 90000);
     Promise.all([loadJsPDF(), makeFrame(c)]).then(function(r){
       fr = r[1];
-      return prepareFrame(fr, c);
+      return prepareFrame(fr);
     }).then(function(){
       var w = fr.contentWindow, d = fr.contentDocument;
-      var m = measure(d, w), pages = paginate(m, c.h);
-      var J = window.jspdf.jsPDF, pw = c.w * 0.75, ph = c.h * 0.75, orient = pw > ph ? 'landscape' : 'portrait';
-      var pdf = new J({unit:'pt', format:[pw, ph], orientation:orient, compress:true});
-      var pi = 0, cur = null, added = 0;
-      function newPage(p){
-        var cv = document.createElement('canvas'), last = p === pages[pages.length - 1];
-        cv.width = Math.round(c.w * S); cv.height = Math.round((last ? p.end - p.start : c.h) * S);
-        var ctx = cv.getContext('2d'); ctx.fillStyle = BG; ctx.fillRect(0, 0, cv.width, cv.height);
-        return {p:p, cv:cv, ctx:ctx};
-      }
-      function finish(pg){
-        var used = Math.min(pg.cv.height, Math.round((pg.p.end - pg.p.start) * S));
-        if(used < pg.cv.height - 1 && used > 8){   // relleno con el color del borde para no dejar franjas
-          var px = pg.ctx.getImageData(4, used - 6, 1, 1).data;
-          pg.ctx.fillStyle = 'rgb(' + px[0] + ',' + px[1] + ',' + px[2] + ')';
-          pg.ctx.fillRect(0, used, pg.cv.width, pg.cv.height - used);
-        }
-        var h = pg.cv.height / S * 0.75;
-        if(added++) pdf.addPage([pw, h], pw > h ? 'landscape' : 'portrait');
-        else if(h < ph) { pdf.deletePage(1); pdf.addPage([pw, h], pw > h ? 'landscape' : 'portrait'); }
-        pdf.addImage(pg.cv.toDataURL('image/jpeg', 0.86), 'JPEG', 0, 0, pw, h, undefined, 'FAST');
-        pg.cv.width = pg.cv.height = 0;
-      }
-      var chain = Promise.resolve();
-      m.blocks.forEach(function(b, bi){
+      // Ancho REAL de la copia (en iPhone el iframe puede no quedar del ancho pedido): todo se mide con él
+      var W = Math.round(d.documentElement.clientWidth) || c.w, pageH = Math.round(c.h * W / c.w);
+      var hero = $('.hero', d); if(hero) hero.style.minHeight = pageH + 'px';   // portada = página completa
+      var els = $$('#pagina > section, body > footer', d).filter(function(el){ return el.getBoundingClientRect().height > 0; });
+      els.forEach(function(el, i){ el.setAttribute('data-pdfb', i); });
+      var blocks = [], y = 0;
+      var chain = frames(w);
+      els.forEach(function(el, i){
         chain = chain.then(function(){
-          toast('Generando PDF… ' + Math.round(bi / m.blocks.length * 100) + '% ⏳', 60000);
-          var sc = S; while(c.w * sc * b.h * sc > 14e6 && sc > 1) sc -= 0.25;   // límite de lienzo en celulares
-          return w.html2canvas(b.el, {scale:sc, useCORS:true, backgroundColor:BG, logging:false,
-            scrollX:0, scrollY:0, windowWidth:c.w, windowHeight:c.h, width:c.w, height:Math.ceil(b.h)});
-        }).then(function(cv){
-          var k = cv.height / b.h;
-          while(pi < pages.length){
-            var p = pages[pi];
-            var s0 = Math.max(p.start, b.top), s1 = Math.min(p.end, b.bottom);
-            if(s1 > s0){
-              if(!cur || cur.p !== p) cur = newPage(p);
-              var dy = Math.floor((s0 - p.start) * S), dh = Math.ceil((s1 - s0) * S) + 1;
-              cur.ctx.drawImage(cv, 0, Math.floor((s0 - b.top) * k), cv.width, Math.max(1, Math.round((s1 - s0) * k)), 0, dy, cur.cv.width, dh);
-            }
-            if(p.end <= b.bottom + 0.5){ if(cur && cur.p === p){ finish(cur); cur = null; } pi++; }
-            else break;
+          toast('Generando PDF… ' + Math.round(i / els.length * 100) + '% ⏳', 90000);
+          var h0 = el.getBoundingClientRect().height, sc = S;
+          var maxArea = isPhone ? 10e6 : 16e6;   // límite de lienzo en celulares
+          while(W * sc * h0 * sc > maxArea && sc > 1) sc -= 0.25;
+          var info = null;
+          function shoot(scale, size){
+            var o = {scale:scale, useCORS:true, allowTaint:false, imageTimeout:20000, backgroundColor:BG, logging:false,
+              scrollX:0, scrollY:0, windowWidth:W, windowHeight:pageH};
+            if(size){ o.width = Math.ceil(size.w); o.height = Math.ceil(size.h); }
+            return w.html2canvas(el, Object.assign(o, {
+              onclone:function(cd){ var ce = cd.querySelector('[data-pdfb="' + i + '"]'); if(ce) info = measureBlock(ce); }}));
           }
-          cv.width = cv.height = 0;
+          return shoot(sc).then(function(cv){
+            if(!cv.width || !cv.height || looksBlank(cv)){ sc = Math.max(1, sc - 0.5); return timeout(300).then(function(){ return shoot(sc); }); }
+            // si la copia quedó más alta que el original, html2canvas recorta el final: se repite con el alto real
+            if(info && Math.abs(info.h - cv.height / sc) > 2){ var sz = {w:info.w, h:info.h}; cv.width = cv.height = 0; return shoot(sc, sz); }
+            return cv;
+          }).then(function(cv){
+            if(!info) info = measureBlock(el);
+            var hh = cv.height / sc;   // alto real dibujado
+            blocks.push({cv:cv, top:y, h:hh, bottom:y + hh, k:cv.height / hh, atoms:info.atoms.map(function(a){
+              var f = hh / (info.h || hh); return {top:a.top * f, bottom:a.bottom * f, h:a.h * f}; })});
+            y += hh;
+          });
         });
       });
-      return chain.then(function(){ if(cur) finish(cur); pdf.save(c.file); });
+      return chain.then(function(){
+        var pages = paginate(blocks, y, pageH);
+        var J = window.jspdf.jsPDF, pw = c.w * 0.75, ph = c.h * 0.75, orient = pw > ph ? 'landscape' : 'portrait';
+        var pdf = new J({unit:'pt', format:[pw, ph], orientation:orient, compress:true});
+        var PS = S * c.w / W;   // pixeles del lienzo de página por px css de la copia
+        pages.forEach(function(p, pi){
+          var last = pi === pages.length - 1;
+          var cv = document.createElement('canvas');
+          cv.width = Math.round(c.w * S); cv.height = Math.round((last ? p.end - p.start : pageH) * PS);
+          var ctx = cv.getContext('2d'); ctx.fillStyle = BG; ctx.fillRect(0, 0, cv.width, cv.height);
+          blocks.forEach(function(b){
+            var s0 = Math.max(p.start, b.top), s1 = Math.min(p.end, b.bottom);
+            if(s1 <= s0) return;
+            ctx.drawImage(b.cv, 0, Math.floor((s0 - b.top) * b.k), b.cv.width, Math.max(1, Math.round((s1 - s0) * b.k)),
+              0, Math.floor((s0 - p.start) * PS), cv.width, Math.ceil((s1 - s0) * PS) + 1);
+          });
+          var used = Math.min(cv.height, Math.round((p.end - p.start) * PS));
+          if(used < cv.height - 1 && used > 8){   // relleno con el color del borde para no dejar franjas
+            var px = ctx.getImageData(4, used - 6, 1, 1).data;
+            ctx.fillStyle = 'rgb(' + px[0] + ',' + px[1] + ',' + px[2] + ')';
+            ctx.fillRect(0, used, cv.width, cv.height - used);
+          }
+          var h = cv.height / S * 0.75;
+          if(pi) pdf.addPage([pw, h], pw > h ? 'landscape' : 'portrait');
+          else if(Math.abs(h - ph) > 0.5){ pdf.deletePage(1); pdf.addPage([pw, h], pw > h ? 'landscape' : 'portrait'); }
+          pdf.addImage(cv.toDataURL('image/jpeg', 0.86), 'JPEG', 0, 0, pw, h, undefined, 'FAST');
+          cv.width = cv.height = 0;
+        });
+        blocks.forEach(function(b){ b.cv.width = b.cv.height = 0; });
+        pdf.save(c.file);
+      });
     }).then(function(){ toast('PDF listo ✅'); })
     .catch(function(e){ console.error(e); toast('No se pudo generar el PDF. Use Imprimir > Guardar como PDF.', 6000); })
     .then(function(){ if(fr && fr.parentNode) fr.parentNode.removeChild(fr); btns.forEach(function(b){ b.disabled = false; }); });

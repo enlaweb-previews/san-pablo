@@ -4,7 +4,7 @@
   --r:18px; --sh:0 10px 30px rgba(40,25,10,.15);
 }
 *{box-sizing:border-box;margin:0;padding:0}
-html{scroll-behavior:smooth}
+html{scroll-behavior:smooth;-webkit-text-size-adjust:100%;text-size-adjust:100%}
 body{font-family:'Nunito',system-ui,sans-serif;color:var(--texto);background:var(--arena);line-height:1.6;font-size:16px;-webkit-font-smoothing:antialiased}
 img{max-width:100%;display:block}
 a{color:inherit}
