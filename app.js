@@ -1,6 +1,7 @@
 (function(){
   var WA = '573123001568';
-  var WA_URL = 'https://wa.me/' + WA + '?text=' + encodeURIComponent('Hola, quiero información del plan en la Reserva Natural San Pablo 🌅');
+  var PLAN = 'RUTA SAN PABLO – CAÑO CHIQUITO';
+  var WA_URL = 'https://wa.me/' + WA + '?text=' + encodeURIComponent('¡Hola! 👋 Quiero información para el plan ' + PLAN + ', en la Reserva Natural San Pablo (#SeformóLaSanpablera).');
   var $ = function(s,c){return (c||document).querySelector(s)};
   var $$ = function(s,c){return Array.prototype.slice.call((c||document).querySelectorAll(s))};
   var root = document.documentElement;
@@ -24,7 +25,7 @@
       ['.chips li', ''],
       ['.card', ''],
       ['.day', ''],
-      ['.rutas, .opcional', ''],
+      ['.fineprint, .video-box', ''],
       ['.collage img', 'zoom'],
       ['.masonry img', 'zoom'],
       ['.cbox', ''],
@@ -65,15 +66,57 @@
     if(g('telefono').replace(/\D/g,'').length<7){ err.textContent='Escriba un teléfono válido.'; form.elements.telefono.focus(); return; }
     var acts=$$('input[name=act]:checked',form).map(function(i){return '• '+i.value});
     var fecha=g('fecha'); if(fecha){ var p=fecha.split('-'); fecha=p[2]+'/'+p[1]+'/'+p[0]; }
-    var lines=['¡Hola! 🌅 Quiero información para el plan en la *Reserva Natural San Pablo* (#SeformóLaSanpablera).','',
+    var dsel=form.querySelector('input[name=dieta]:checked'), dieta=dsel?dsel.value:'';
+    if(dieta==='Otra'){ var dox=g('dieta_otra'); dieta='Otra'+(dox?': '+dox:''); }
+    var lines=['¡Hola! 👋 Quiero información para el plan *'+PLAN+'*, en la *Reserva Natural San Pablo* (#SeformóLaSanpablera).','',
       '👤 *Nombre:* '+g('nombre'), '📞 *Teléfono:* '+g('telefono'), '👥 *Personas:* '+(g('personas')||'—'),
-      '📅 *Fecha preferida:* '+(fecha||'Por definir'), '🚙 *Vehículo:* '+(g('vehiculo')||'—')];
+      '📅 *Fecha preferida:* '+(fecha||'Por definir'), '🚙 *Vehículo:* '+(g('vehiculo')||'—'),
+      '🤧 *Alergias:* '+(g('alergia')||'No indica'), '🍽️ *Preferencia alimenticia:* '+(dieta||'No indica')];
     if(acts.length){ lines.push('','🎯 *Me interesa:*'); lines=lines.concat(acts); }
     if(g('mensaje')){ lines.push('','💬 '+g('mensaje')); }
     var url='https://wa.me/'+WA+'?text='+encodeURIComponent(lines.join('\n'));
     var w=window.open(url,'_blank'); if(!w){ location.href=url; }
     toast('Abriendo WhatsApp… ¡solo presione enviar! ✅',4000);
   });
+
+  // Preferencia alimenticia: campo "¿cuál?" solo con "Otra"
+  var dOtra=$('#dieta-otra');
+  $$('input[name=dieta]').forEach(function(r){ r.addEventListener('change',function(){
+    var o=r.value==='Otra'&&r.checked; dOtra.hidden=!o; if(o) dOtra.focus(); else dOtra.value=''; }); });
+
+  // ---------- Galería: visor a pantalla completa ----------
+  (function(){
+    var thumbs=$$('.masonry img'), lb=$('#lb'); if(!thumbs.length||!lb) return;
+    var img=$('.lb-img',lb), cap=$('.lb-cap',lb), idx=0, opener=null;
+    var full=function(t){ return (t.getAttribute('data-full')||t.getAttribute('src').replace('-sm.webp','.webp')); };
+    function show(i){
+      idx=(i+thumbs.length)%thumbs.length; var t=thumbs[idx];
+      img.classList.add('ld'); img.onload=img.onerror=function(){ img.classList.remove('ld'); };
+      img.src=full(t); img.alt=t.alt; cap.textContent=t.alt+'  ·  '+(idx+1)+' / '+thumbs.length;
+      [1,-1].forEach(function(d){ var n=new Image(); n.src=full(thumbs[(idx+d+thumbs.length)%thumbs.length]); });
+    }
+    function open(i,from){ opener=from; lb.hidden=false; document.body.classList.add('lb-open'); show(i); $('.lb-x',lb).focus(); }
+    function close(){ if(lb.hidden) return; lb.hidden=true; document.body.classList.remove('lb-open'); img.removeAttribute('src'); if(opener&&opener.focus) opener.focus({preventScroll:true}); }
+    thumbs.forEach(function(t,i){
+      t.tabIndex=0; t.setAttribute('role','button');
+      t.addEventListener('click',function(){ open(i,t); });
+      t.addEventListener('keydown',function(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); open(i,t); } });
+    });
+    $('.lb-x',lb).addEventListener('click',close);
+    $('.lb-prev',lb).addEventListener('click',function(e){ e.stopPropagation(); show(idx-1); });
+    $('.lb-next',lb).addEventListener('click',function(e){ e.stopPropagation(); show(idx+1); });
+    lb.addEventListener('click',function(e){ if(e.target===lb||e.target.classList.contains('lb-fig')) close(); });
+    document.addEventListener('keydown',function(e){
+      if(lb.hidden) return;
+      if(e.key==='Escape') close(); else if(e.key==='ArrowLeft') show(idx-1); else if(e.key==='ArrowRight') show(idx+1);
+    });
+    var x0=null,y0=null;
+    lb.addEventListener('touchstart',function(e){ if(e.touches.length>1){ x0=null; return; } x0=e.touches[0].clientX; y0=e.touches[0].clientY; },{passive:true});
+    lb.addEventListener('touchend',function(e){
+      if(x0===null) return; var dx=e.changedTouches[0].clientX-x0, dy=e.changedTouches[0].clientY-y0; x0=null;
+      if(Math.abs(dx)>45&&Math.abs(dx)>Math.abs(dy)*1.4) show(idx+(dx<0?1:-1));
+    },{passive:true});
+  })();
 
   // ---------- Exportar a PDF (móvil / PC) ----------
   // Se arma una copia de la página en un iframe oculto con el ancho exacto (móvil 414 px / PC 1200 px),

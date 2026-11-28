@@ -208,3 +208,40 @@ h3{font-size:1.45rem;color:var(--verde)}
   .day,.card,.cbox,.rutas,.opcional{break-inside:avoid}
   body{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 }
+
+/* ---- Correcciones Ceila (nov 2026) ---- */
+.ruta-line{display:table;margin:.2rem auto 1rem;text-align:center;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.22);border-radius:14px;padding:.55rem 1rem;color:var(--blanco);font-weight:700;font-size:1rem;line-height:1.45}
+.ruta-line b{color:var(--sol2);letter-spacing:.06em;margin-right:.25rem}
+.day li .opt{display:inline-block;background:var(--sol);color:#fff;font-weight:800;border-radius:8px;padding:0 .5rem;margin-left:.2rem;line-height:1.5}
+.day-note{margin-top:12px;padding:10px 12px;background:rgba(232,116,44,.1);border-left:4px solid var(--sol);border-radius:8px;font-size:.88rem;color:var(--tierra);line-height:1.45}
+.day-note b{color:var(--sol)}
+.card p.lugares{margin-top:.35rem;font-size:.9rem}
+.card p.lugares b{color:var(--sol)}
+.fineprint{max-width:640px;margin:26px auto 0;padding-top:14px;border-top:1px solid rgba(255,255,255,.18);text-align:center;font-size:.78rem;line-height:1.5;font-style:italic;color:rgba(255,250,242,.7)}
+.video-box{max-width:420px;margin:26px auto 0}
+.video-box video{display:block;width:100%;max-height:78vh;border-radius:var(--r);background:#000;box-shadow:var(--sh)}
+.video-ph{aspect-ratio:4/3;border-radius:var(--r);background:linear-gradient(135deg,var(--sol),#c4501a);color:#fff;display:grid;place-content:center;justify-items:center;gap:.3rem;text-align:center;box-shadow:var(--sh)}
+.video-ph .vp-ico{width:64px;height:64px;border-radius:50%;background:rgba(255,255,255,.22);display:grid;place-items:center;font-size:1.6rem;padding-left:4px}
+.video-ph p{font-family:'Bebas Neue';font-size:1.8rem;letter-spacing:.04em}
+.video-ph small{opacity:.85;font-weight:700}
+.pdf-mode .video-box video{display:none}
+/* formulario */
+.form .dieta .dieta-otra{grid-column:1/-1}
+.form .dieta .dieta-otra[hidden]{display:none}
+/* galería + lightbox */
+.masonry img{cursor:zoom-in;transition:transform .2s,box-shadow .2s}
+.masonry img:hover{box-shadow:0 8px 22px rgba(40,25,10,.25)}
+.masonry img:focus-visible{outline:3px solid var(--sol);outline-offset:2px}
+.lb{position:fixed;inset:0;z-index:1000;background:rgba(10,8,5,.94);display:flex;align-items:center;justify-content:center;touch-action:pan-y pinch-zoom;overscroll-behavior:contain}
+.lb[hidden]{display:none}
+.lb-fig{margin:0;max-width:100vw;max-height:100vh;max-height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:56px 0 44px}
+.lb-img{max-width:100vw;max-height:calc(100dvh - 100px);object-fit:contain;user-select:none;-webkit-user-select:none;border-radius:4px;transition:opacity .15s}
+.lb-img.ld{opacity:.25}
+.lb-cap{color:#e9dcc6;font-size:.85rem;margin-top:10px;padding:0 56px;text-align:center;min-height:1.3em}
+.lb-x,.lb-nav{position:absolute;border:0;background:rgba(255,255,255,.14);color:#fff;cursor:pointer;border-radius:50%;display:grid;place-items:center;-webkit-tap-highlight-color:transparent}
+.lb-x:hover,.lb-nav:hover{background:rgba(255,255,255,.28)}
+.lb-x{top:max(10px,env(safe-area-inset-top));right:12px;width:46px;height:46px;font-size:2rem;line-height:1;z-index:2}
+.lb-nav{top:50%;transform:translateY(-50%);width:46px;height:46px;font-size:1.2rem;z-index:2}
+.lb-prev{left:10px}.lb-next{right:10px}
+@media(max-width:700px){.lb-nav{width:40px;height:40px;opacity:.85;top:auto;bottom:max(10px,env(safe-area-inset-bottom));transform:none}.lb-prev{left:14px}.lb-next{right:14px}.lb-fig{padding:60px 0 64px}.lb-cap{padding:0 64px}}
+body.lb-open{overflow:hidden}
